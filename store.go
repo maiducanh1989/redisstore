@@ -3,6 +3,7 @@ package redisstore
 import (
     "bytes"
     "encoding/gob"
+    "fmt"
     "net/http"
     "time"
 
@@ -20,26 +21,31 @@ type (
     }
 )
 
-func (s *RedisStore) Get(r *http.Request, name string) (*sessions.Session, error) {
-    return sessions.GetRegistry(r).Get(s, name)
-}
+// var ctx = context.Background()
 
 func (s *RedisStore) New(r *http.Request, name string) (*sessions.Session, error) {
+
+    fmt.Println("redisstore: new")
+    
     ss := sessions.NewSession(s, name)
-    opts := s.Options
-    ss.Options = opts
+    ss.Options = s.Options
     ss.IsNew = true
 
     c, err := r.Cookie(name)
+
     if err != nil {
-        return ss, nil
+        return nil, err
     }
+    fmt.Println("redisstore: new:", c)
     ss.ID = c.Value
 
     return ss, err
+
 }
 
 func (s *RedisStore) Save(r *http.Request, w http.ResponseWriter, ss *sessions.Session) error {
+
+    fmt.Println("redisstore: save")
 
     // Delete if max-age is <= 0
     if ss.Options.MaxAge <= 0 {
@@ -55,6 +61,8 @@ func (s *RedisStore) Save(r *http.Request, w http.ResponseWriter, ss *sessions.S
         ss.ID = ulid.Make().String()
     }
 
+    fmt.Println("redisstore: save:", ss.ID)
+
     // save
     var b bytes.Buffer
     enc := gob.NewEncoder(&b)
@@ -63,4 +71,30 @@ func (s *RedisStore) Save(r *http.Request, w http.ResponseWriter, ss *sessions.S
     }
 
     return s.Client.Set(r.Context(), ss.ID, b, time.Duration(ss.Options.MaxAge)*time.Second).Err()
+
+}
+
+func (s *RedisStore) Get(r *http.Request, name string) (*sessions.Session, error) {
+
+    fmt.Println("redisstore: get")
+
+    c, err := r.Cookie(name)
+    if err != nil {
+        return nil, err
+    }
+
+    b, err := s.Client.Get(r.Context(), c.Value).Bytes()
+    if err != nil {
+        return nil, err
+    }
+
+    buf := bytes.NewBuffer(b)
+    dec := gob.NewDecoder(buf)
+    ss := sessions.Session{}
+    if err := dec.Decode(&ss); err != nil {
+        return nil, err
+    }
+
+    return &ss, nil
+
 }

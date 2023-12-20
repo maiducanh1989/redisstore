@@ -26,7 +26,7 @@ type (
 func (s *RedisStore) New(r *http.Request, name string) (*sessions.Session, error) {
 
     fmt.Println("redisstore: new")
-    
+
     ss := sessions.NewSession(s, name)
     ss.Options = s.Options
     ss.IsNew = true

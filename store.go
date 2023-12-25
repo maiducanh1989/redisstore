@@ -1,13 +1,12 @@
 package redisstore
 
 import (
-    "bytes"
-    "encoding/gob"
     "net/http"
     "strings"
     "time"
 
     "github.com/gorilla/sessions"
+    jsoniter "github.com/json-iterator/go"
     "github.com/oklog/ulid/v2"
     "github.com/redis/go-redis/v9"
 )
@@ -32,14 +31,19 @@ func (store *RedisStore) Get(request *http.Request, name string) (*sessions.Sess
     sess.ID = c.Value
     sess.IsNew = false
 
-    b, err := store.Client.Get(request.Context(), c.Value).Bytes()
-    if err != nil {
-        return sess, nil
-    }
+    // b, err := store.Client.Get(request.Context(), c.Value).Bytes()
+    // if err != nil {
+    //     return sess, nil
+    // }
 
-    bf := bytes.NewBuffer(b)
-    dec := gob.NewDecoder(bf)
-    if err := dec.Decode(&sess.Values); err != nil {
+    // bf := bytes.NewBuffer(b)
+    // dec := gob.NewDecoder(bf)
+    // if err := dec.Decode(&sess.Values); err != nil {
+    // }
+
+    var json = jsoniter.ConfigCompatibleWithStandardLibrary
+    if err := json.Unmarshal([]byte(store.Client.Get(request.Context(), c.Value).String()), &sess.Values); err != nil {
+        return sess, err
     }
 
     return sess, nil
@@ -84,16 +88,19 @@ func (store *RedisStore) Save(request *http.Request, writer http.ResponseWriter,
 
     // save session values
 
-    var bf bytes.Buffer
-    enc := gob.NewEncoder(&bf)
-    if err := enc.Encode(sess.Values); err != nil {
-        return err
-    }
+    // var bf bytes.Buffer
+    // enc := gob.NewEncoder(&bf)
+    // if err := enc.Encode(sess.Values); err != nil {
+    //     return err
+    // }
+
+    var json = jsoniter.ConfigCompatibleWithStandardLibrary
+    b, _ := json.Marshal(&sess.Values)
 
     return store.Client.Set(
         request.Context(),
         sess.ID,
-        bf.Bytes(),
+        b,
         time.Duration(sess.Options.MaxAge)*time.Second,
     ).Err()
 }
